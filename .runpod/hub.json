@@ -1,0 +1,20 @@
+{
+  "title": "Chatterbox Português do Brasil",
+  "description": "Fala em português do Brasil e clona a voz a partir do link do áudio de referência.",
+  "type": "serverless",
+  "category": "audio",
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 50,
+    "gpuCount": 1,
+    "gpuIds": "ADA_24",
+    "allowedCudaVersions": ["12.8", "12.7", "12.6", "12.5", "12.4"],
+    "presets": [
+      {
+        "name": "Português do Brasil",
+        "defaults": {}
+      }
+    ],
+    "env": []
+  }
+}
