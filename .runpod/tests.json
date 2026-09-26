@@ -6,6 +6,15 @@
         "text": "Oi, tudo bem? Este é um teste em português do Brasil."
       },
       "timeout": 600000
+    },
+    {
+      "name": "voz_clonada",
+      "input": {
+        "text": "Aqui é a voz clonada, em português do Brasil.",
+        "reference_audio_url": "https://storage.googleapis.com/chatterbox-demo-samples/mtl-v3-single-language-prompts/pt-br/pt_br_f2.wav",
+        "reference_cache_key": "teste-hub@1"
+      },
+      "timeout": 600000
     }
   ],
   "config": {

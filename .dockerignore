@@ -3,5 +3,5 @@ __pycache__
 .git
 .runpod
 tests
-test_resolve_reference.py
+test_*.py
 README.md

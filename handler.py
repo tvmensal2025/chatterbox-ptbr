@@ -1,17 +1,20 @@
 """Worker da Runpod: Chatterbox em português do Brasil, com clonagem por link."""
+import base64
 import os
-import tempfile
 from pathlib import Path
 
 import runpod
 
+from encode_wav import wav_bytes
 from resolve_reference import materialize_reference
+from voice_cache import VoiceCache
 
 BASE_REPO = "ResembleAI/chatterbox"
 BRAZIL_REPO = "ResembleAI/Chatterbox-Multilingual-pt-br"
 DEFAULT_VOICE_URL = "https://storage.googleapis.com/chatterbox-demo-samples/mtl-v3-single-language-prompts/pt-br/pt_br_f2.wav"
 DEFAULT_VOICE_PATH = "/tmp/pt-br-default.wav"
 DEVICE = "cuda" if __import__("torch").cuda.is_available() else "cpu"
+WARM_UP_TEXT = "Olá, tudo bem?"
 
 MODEL = None
 DEFAULT_VOICE = None
@@ -100,6 +103,9 @@ def ensure_default_voice() -> str:
     return DEFAULT_VOICE
 
 
+VOICES = VoiceCache(ensure_default_voice)
+
+
 def handler(job):
     job_input = job.get("input") or {}
     if job_input.get("health_check"):
@@ -112,44 +118,43 @@ def handler(job):
     exaggeration = float(job_input.get("exaggeration", 0.5))
     cfg_weight = float(job_input.get("cfg_weight", 0.5))
     temperature = float(job_input.get("temperature", 0.8))
-    fd, dest = tempfile.mkstemp(suffix=".wav")
-    os.close(fd)
     try:
-        audio_path = materialize_reference(job_input, dest) or ensure_default_voice()
-        wav = get_model().generate(
+        model = get_model()
+        cloned = VOICES.use(model, job_input, exaggeration)
+        wav = model.generate(
             text,
             language_id="pt",
-            audio_prompt_path=audio_path,
             exaggeration=exaggeration,
             cfg_weight=cfg_weight,
             temperature=temperature,
         )
-        import base64
-        import io
-
-        import torchaudio as ta
-
-        buffer = io.BytesIO()
-        ta.save(buffer, wav, get_model().sr, format="wav")
         return {
-            "audio_base64": base64.b64encode(buffer.getvalue()).decode("utf-8"),
-            "sample_rate": get_model().sr,
+            "audio_base64": base64.b64encode(wav_bytes(wav.squeeze(0).numpy(), model.sr)).decode("utf-8"),
+            "sample_rate": model.sr,
             "format": "wav",
             "language": "pt-BR",
-            "cloned": audio_path != DEFAULT_VOICE_PATH,
+            "cloned": cloned,
         }
     except Exception as error:
         return {"error": str(error)}
-    finally:
-        if os.path.exists(dest):
-            os.remove(dest)
+
+
+def prepare_worker() -> None:
+    """Sem GPU o worker sai em vez de gerar na CPU, lenta demais para a ligação. A frase de aquecimento tira a lentidão da primeira fala."""
+    import torch
+
+    if not torch.cuda.is_available():
+        raise SystemExit("Worker sem GPU CUDA. O Chatterbox pt-BR não atende na CPU.")
+    print(f"GPU {torch.cuda.get_device_name(0)}")
+    model = get_model()
+    VOICES.use(model, {}, 0.5)
+    model.generate(WARM_UP_TEXT, language_id="pt")
+    print("Modelo pt-BR pronto")
 
 
 if __name__ == "__main__":
     try:
-        get_model()
-        ensure_default_voice()
-        print("Modelo pt-BR pronto")
+        prepare_worker()
     except Exception as error:
-        print(f"Falha ao carregar o modelo pt-BR: {error}")
+        print(f"Falha ao preparar o modelo pt-BR: {error}")
     runpod.serverless.start({"handler": handler})
